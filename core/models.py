@@ -1,5 +1,4 @@
 from django.db import models
-from authentication.models import User
 
 # Create your models here.
 
@@ -21,7 +20,7 @@ class TimestampedModel(models.Model):
         ordering = ["-created_at", "-updated_at"]
 
 
-class Region(TimestampedModel):
+class Tag(TimestampedModel):
     name = models.CharField(max_length=255)
     is_active = models.BooleanField(default=True)
 
@@ -29,55 +28,82 @@ class Region(TimestampedModel):
         return self.name
 
 
-class Country(TimestampedModel):
-    region = models.ForeignKey(Region, on_delete=models.CASCADE, related_name="countries")
+class Category(TimestampedModel):
+    name = models.CharField(max_length=255, unique=True)
+    rank = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["rank"]
+
+    def __str__(self):
+        return self.name
+
+
+class MenuItem(TimestampedModel):
     name = models.CharField(max_length=255)
-    iso3 = models.CharField(max_length=10)
-    iso2 = models.CharField(max_length=10)
-    phone_code = models.CharField(max_length=10)
+    image = models.ImageField(upload_to="menu_items", blank=True, null=True)
+    description = models.TextField(blank=True)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    category = models.ForeignKey(Category, related_name="menu_items", limit_choices_to={"is_active": True}, on_delete=models.CASCADE)
+    tags = models.ManyToManyField(Tag, related_name="menu_items", limit_choices_to={"is_active": True})
+    rank = models.PositiveIntegerField(default=0)
+    quantity = models.IntegerField(default=1)
     is_active = models.BooleanField(default=True)
 
-    def __str__(self):
-        return f"{self.name} ({self.region.name})"
-
-
-class State(TimestampedModel):
-    country = models.ForeignKey(Country, on_delete=models.CASCADE, related_name="states")
-    name = models.CharField(max_length=255)
-    state_code = models.CharField(max_length=10)
-    is_active = models.BooleanField(default=True)
+    class Meta:
+        ordering = ["category__rank", "rank"]
 
     def __str__(self):
-        return f"{self.name} - {self.country.name}"
+        return f"{self.name} - {self.category} - {self.is_active}"
+
+    def save(self, *args, **kwargs):
+        if self.quantity == 0:
+            self.is_active = False
+
+        super().save(*args, **kwargs)
 
 
-class City(TimestampedModel):
-    country = models.ForeignKey(Country, on_delete=models.CASCADE, related_name="cities")
-    state = models.ForeignKey(State, on_delete=models.CASCADE, related_name="cities")
-    name = models.CharField(max_length=255)
-    is_active = models.BooleanField(default=True)
-
-    def __str__(self):
-        return f"{self.name} - {self.state.name}"
-
-
-class Address(TimestampedModel):
-    # Relations
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="addresses")
-    country = models.ForeignKey(Country, on_delete=models.CASCADE, related_name="addresses")
-    state = models.ForeignKey(State, on_delete=models.CASCADE, related_name="addresses")
-    city = models.ForeignKey(City, on_delete=models.CASCADE, related_name="addresses")
-
-    # Fields
-    title = models.CharField(max_length=255)
-    address_line1 = models.CharField(max_length=255)
-    address_line2 = models.CharField(max_length=255)
-    pincode = models.CharField(max_length=10)
-    is_active = models.BooleanField(default=True)
-
-    # Google Maps API
-    latitude = models.FloatField(null=True, blank=True)
-    longitude = models.FloatField(null=True, blank=True)
+class Order(TimestampedModel):
+    STATUS_CHOICES = (
+        ("pending", "Pending"),
+        ("ready", "Ready"),
+        ("completed", "Completed"),
+        ("cancelled", "Cancelled"),
+    )
+    table_number = models.IntegerField()
+    status = models.CharField(max_length=255, default="pending", choices=STATUS_CHOICES)
 
     def __str__(self):
-        return f"{self.title} - {self.user.phonenumber}"
+        return str(self.table_number)
+
+
+class OrderedItem(TimestampedModel):
+    order = models.ForeignKey(Order, related_name="ordered_items", on_delete=models.CASCADE)
+    menu_item = models.ForeignKey(MenuItem, related_name="quantities", limit_choices_to={"is_active": True}, on_delete=models.CASCADE)
+    quantity = models.PositiveIntegerField(default=1)
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    def __str__(self):
+        return f"{self.menu_item} - {self.quantity}"
+
+    def save(self, *args, **kwargs):
+        self.price = self.menu_item.price * self.quantity
+        super().save(*args, **kwargs)
+
+
+class Payment(TimestampedModel):
+    STATUS_CHOICES = (
+        ("pending", "Pending"),
+        ("completed", "Completed"),
+        ("cancelled", "Cancelled"),
+    )
+    order = models.ForeignKey(Order, related_name="payments", on_delete=models.CASCADE)
+    price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+
+    def __str__(self):
+        return f"{self.order} - {self.price}"
+
+    def save(self, *args, **kwargs):
+        self.price = OrderedItem.objects.filter(order=self.order).aggregate(models.Sum("price"))["price__sum"]
+        super().save(*args, **kwargs)

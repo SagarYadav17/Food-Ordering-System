@@ -30,8 +30,8 @@ INSTALLED_APPS = [
     "rest_framework",
     "rest_framework_simplejwt",
     "corsheaders",
+    "django_filters",
     # Apps
-    "authentication",
     "core",
 ]
 
@@ -122,23 +122,25 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 # django-cors-headers
-# LINK: https://pypi.org/project/django-cors-headers/
+# https://pypi.org/project/django-cors-headers/
 
 CORS_ALLOW_ALL_ORIGINS = True
 
+
 # django-rest-framework
-# LINK: https://www.django-rest-framework.org/api-guide/settings/
+# https://www.django-rest-framework.org/api-guide/settings/
 
 REST_FRAMEWORK = {
-    "DEFAULT_RENDERER_CLASSES": ("rest_framework.renderers.JSONRenderer",),
     "DEFAULT_AUTHENTICATION_CLASSES": ("rest_framework_simplejwt.authentication.JWTAuthentication",),
+    "DEFAULT_PERMISSION_CLASSES": ("rest_framework.permissions.IsAuthenticated",),
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
+    "DEFAULT_FILTER_BACKENDS": ["django_filters.rest_framework.DjangoFilterBackend"],
     "PAGE_SIZE": 20,
 }
 
 
 # djangorestframework-simplejwt
-# LINK: https://django-rest-framework-simplejwt.readthedocs.io/en/latest/
+# https://django-rest-framework-simplejwt.readthedocs.io/en/latest/
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(days=1),
